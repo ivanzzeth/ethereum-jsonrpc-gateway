@@ -44,7 +44,8 @@ func (r *Request) isOldTrieRequest(currentBlockNumber int) (res bool) {
 	if method == "eth_subscribe" || method == "eth_unsubscribe" || method == "trace_block" ||
 		method == "trace_call" || method == "trace_callMany" || method == "trace_filter" ||
 		method == "trace_transaction" {
-		return true
+		res = true
+		return
 	}
 
 	if method == "eth_getProof" || method == "eth_getStorageAt" {
@@ -71,13 +72,11 @@ func (r *Request) isOldTrieRequest(currentBlockNumber int) (res bool) {
 
 		reqBlockNumber = r.data.Params[0]
 	} else if method == "eth_getLogs" {
-		if len(r.data.Params) < 1 {
-			return
-		}
-
-		return true
+		res = true
+		return
 	} else {
-		return true
+		res = true
+		return
 	}
 
 	switch v := reqBlockNumber.(type) {

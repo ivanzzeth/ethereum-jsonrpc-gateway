@@ -160,3 +160,55 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 
 	return nil, fmt.Errorf("no valid upstream")
 }
+
+type LoadBalanceFallbackProxy struct {
+	currentUpstreamIndex *atomic.Value
+	upsteamStatus        *sync.Map
+}
+
+func newLoadBalanceFallbackProxy() *LoadBalanceFallbackProxy {
+	v := &atomic.Value{}
+	v.Store(0)
+
+	p := &LoadBalanceFallbackProxy{
+		currentUpstreamIndex: v,
+		upsteamStatus:        &sync.Map{},
+	}
+
+	for i := 0; i < len(currentRunningConfig.Upstreams); i++ {
+		p.upsteamStatus.Store(i, true)
+	}
+
+	return p
+}
+
+func (p *LoadBalanceFallbackProxy) handle(req *Request) ([]byte, error) {
+	for i := 0; i < len(currentRunningConfig.Upstreams); i++ {
+		index := p.currentUpstreamIndex.Load().(int)
+
+		value, _ := p.upsteamStatus.Load(index)
+		isUpstreamValid := value.(bool)
+
+		if isUpstreamValid {
+			bts, err := currentRunningConfig.Upstreams[index].handle(req)
+
+			nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(currentRunningConfig.Upstreams))))
+			p.currentUpstreamIndex.Store(nextUpstreamIndex)
+			logrus.Infof("upstream %d load balancing, then switch to %d", index, nextUpstreamIndex)
+
+			if err != nil {
+				p.upsteamStatus.Store(i, false)
+				go func(i int) {
+					<-time.After(5 * time.Second)
+					p.upsteamStatus.Store(i, true)
+				}(index)
+
+				continue
+			} else {
+				return bts, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no valid upstream")
+}
