@@ -5,8 +5,8 @@
   "_oldTrieUrl": "for archive data, support http, https, or set empty string",
   "oldTrieUrl": "",
 
-  "_strategy": "support NAIVE, RACE, FALLBACK, LoadBalance",
-  "strategy": "LoadBalance",
+  "_strategy": "support NAIVE, RACE, FALLBACK, BALANCING",
+  "strategy": "BALANCING",
 
   "_methodLimitationEnabled": "limit or not",
   "methodLimitationEnabled": false,

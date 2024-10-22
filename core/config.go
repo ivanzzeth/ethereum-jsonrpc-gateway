@@ -125,7 +125,7 @@ func BuildRunningConfigFromConfig(parentContext context.Context, cfg *Config) (*
 			panic(fmt.Errorf("fallback proxy strategy require more than 1 upstream"))
 		}
 		rcfg.Strategy = newFallbackProxy()
-	case "LoadBalance":
+	case "BALANCING":
 		if len(rcfg.Upstreams) < 2 {
 			panic(fmt.Errorf("loadbalance proxy strategy require more than 1 upstream"))
 		}
