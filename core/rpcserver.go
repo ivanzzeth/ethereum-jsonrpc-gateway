@@ -134,7 +134,7 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	defer func(){
+	defer func() {
 		costInMs := time.Since(startTime).Nanoseconds() / 1000000
 		if costInMs > 5000 {
 			logrus.Infof("slow request, method: %s, cost: %d", proxyRequest.data.Method, costInMs)

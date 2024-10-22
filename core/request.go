@@ -31,28 +31,58 @@ func (r *Request) isOldTrieRequest(currentBlockNumber int) (res bool) {
 	}()
 
 	if currentBlockNumber == 0 {
-		res = false
+		return
+	}
+
+	if len(r.data.Params) == 0 {
 		return
 	}
 
 	method := r.data.Method
+	var reqBlockNumber interface{}
 
-	if method != "eth_call" && method != "eth_getBalance" {
-		res = false
+	if method == "eth_subscribe" || method == "eth_unsubscribe" || method == "trace_block" ||
+		method == "trace_call" || method == "trace_callMany" || method == "trace_filter" ||
+		method == "trace_transaction" {
 		return
 	}
 
-	if len(r.data.Params) != 2 {
-		res = false
-		return
-	}
+	if method == "eth_getProof" || method == "eth_getStorageAt" {
+		if len(r.data.Params) < 3 {
+			return
+		}
 
-	reqBlockNumber := r.data.Params[1]
+		reqBlockNumber = r.data.Params[2]
+	} else if method == "eth_call" || method == "eth_createAccessList" ||
+		method == "eth_estimateGas" || method == "eth_feeHistory" || method == "eth_getBalance" ||
+		method == "eth_getCode" ||
+		method == "eth_getTransactionCount" {
+		if len(r.data.Params) < 2 {
+			return
+		}
+
+		reqBlockNumber = r.data.Params[1]
+	} else if method == "eth_getBlockByNumber" || method == "eth_getBlockReceipts" ||
+		method == "eth_getBlockTransactionCountByNumber" || method == "eth_getUncleByBlockNumberAndIndex" ||
+		method == "eth_getUncleCountByBlockNumber" || method == "eth_getTransactionByBlockNumberAndIndex" {
+		if len(r.data.Params) >= 1 {
+			return
+		}
+
+		reqBlockNumber = r.data.Params[0]
+	} else if method == "eth_getLogs" {
+		if len(r.data.Params) < 1 {
+			return
+		}
+
+		return true
+	} else {
+		return true
+	}
 
 	switch v := reqBlockNumber.(type) {
 	case string:
 		if v == "latest" || v == "pending" {
-			res = false
 			return
 		}
 		n, _ := strconv.ParseInt(v, 0, 64)
@@ -65,7 +95,6 @@ func (r *Request) isOldTrieRequest(currentBlockNumber int) (res bool) {
 		res = currentBlockNumber-int(v) > 100
 	default:
 		logrus.Errorf("unknown blocknumber %+v", v)
-		res = false
 	}
 	return
 }
