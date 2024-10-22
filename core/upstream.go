@@ -83,6 +83,8 @@ func newUpstream(ctx context.Context, urlString string, oldTrieUrlString string)
 }
 
 func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
+	logrus.Infof("%v handled by %v", request.data.Method, u.url)
+
 	ul := u.url
 
 	if request.isOldTrieRequest(u.blockNumber) {
@@ -110,6 +112,8 @@ func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
 }
 
 func (u *WsUpstream) handle(request *Request) ([]byte, error) {
+	logrus.Infof("%v handled by %v", request.data.Method, u.url)
+
 	proxyRequest := &wsProxyRequest{
 		request,
 		atomic.AddInt64(&u.nextID, 1),
