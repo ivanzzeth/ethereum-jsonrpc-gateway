@@ -44,7 +44,7 @@ func (r *Request) isOldTrieRequest(currentBlockNumber int) (res bool) {
 	if method == "eth_subscribe" || method == "eth_unsubscribe" || method == "trace_block" ||
 		method == "trace_call" || method == "trace_callMany" || method == "trace_filter" ||
 		method == "trace_transaction" {
-		return
+		return true
 	}
 
 	if method == "eth_getProof" || method == "eth_getStorageAt" {
