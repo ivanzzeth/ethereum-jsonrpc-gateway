@@ -125,8 +125,10 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	if req.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
+	if req.URL.Path == "/health" {
+		info := getHealthInfo()
+		infoBts, _ := json.Marshal(info)
+		_, _ = w.Write(infoBts)
 		return
 	}
 
@@ -141,6 +143,11 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(400)
 		_, _ = w.Write([]byte("protocol Should Be http or ws"))
 		Count("bad_request")
+		return
+	}
+
+	if req.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 

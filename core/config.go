@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,6 +34,38 @@ type RunningConfig struct {
 	Configs map[uint64]*RunningChainConfig
 }
 
+func (c *RunningConfig) close() {
+	c.stop()
+}
+
+func (c *RunningConfig) healthCheck() {
+	go func() {
+		// TODO: Configurable
+		ticker := time.NewTicker(2 * time.Minute)
+
+		check := func() {
+			logrus.Infof("healthCheck started...")
+			for _, cfg := range c.Configs {
+				cfg.healthCheck()
+
+				time.Sleep(10 * time.Second)
+			}
+		}
+
+		check()
+
+		for {
+			select {
+			case <-ticker.C:
+				check()
+			case <-c.ctx.Done():
+				logrus.Infof("healthCheck closed...")
+				return
+			}
+		}
+	}()
+}
+
 type RunningChainConfig struct {
 	Upstreams               []Upstream
 	Strategy                IStrategy
@@ -41,7 +74,24 @@ type RunningChainConfig struct {
 	allowedCallContracts    map[string]bool
 }
 
+func (c *RunningChainConfig) healthCheck() {
+	for _, up := range c.Upstreams {
+		up.updateBlockNumber()
+	}
+
+	sort.Slice(c.Upstreams, func(i, j int) bool {
+		return c.Upstreams[i].getLatancy() <= c.Upstreams[j].getLatancy()
+	})
+
+	logrus.Infof("running chain upstreams updated")
+}
+
 func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) {
+	oldOne := currentRunningConfig
+	if oldOne != nil {
+		defer oldOne.close()
+	}
+
 	ctx, stop := context.WithCancel(ctx)
 
 	rcfg := &RunningConfig{
@@ -73,6 +123,8 @@ func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) 
 		if len(rcfg.Configs[chainId].Upstreams) == 0 {
 			return nil, fmt.Errorf("need upstreams")
 		}
+
+		go rcfg.healthCheck()
 
 		switch chainCfg.Strategy {
 		case "NAIVE":

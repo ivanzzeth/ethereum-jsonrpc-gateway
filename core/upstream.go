@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,6 +21,10 @@ import (
 // the handle function will execute concurrently
 type Upstream interface {
 	handle(*Request) ([]byte, error)
+	updateBlockNumber()
+	getRpcUrl() string
+	isAlive() bool
+	getLatancy() int64
 }
 
 type wsProxyRequest struct {
@@ -38,6 +43,8 @@ type WsUpstream struct {
 	requestQueue chan *wsProxyRequest
 	nextID       int64     // proxy request id
 	requests     *sync.Map // proxy request id => proxy request
+	blockNumber  int
+	latency      int64
 }
 
 type HttpUpstream struct {
@@ -46,6 +53,7 @@ type HttpUpstream struct {
 	url         string
 	oldTrieUrl  string
 	blockNumber int
+	latency     int64
 }
 
 type BlockNumberResponseData struct {
@@ -113,6 +121,37 @@ func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
 	return bts, nil
 }
 
+func (u *HttpUpstream) updateBlockNumber() {
+	req := getBlockNumberRequest(u.chainId)
+	var latency int64
+	startTime := time.Now()
+	bts, err := u.handle(req)
+	endTime := time.Now()
+	if err != nil {
+		latency = math.MaxInt64
+	} else {
+		latency = int64(endTime.Sub(startTime))
+	}
+	var res BlockNumberResponseData
+	_ = json.Unmarshal(bts, &res)
+
+	blockNumber, _ := strconv.ParseInt(res.Result, 0, 64)
+	u.blockNumber = int(blockNumber)
+	u.latency = latency
+}
+
+func (u *HttpUpstream) isAlive() bool {
+	return u.latency != math.MaxInt64
+}
+
+func (u *HttpUpstream) getLatancy() int64 {
+	return u.latency
+}
+
+func (u *HttpUpstream) getRpcUrl() string {
+	return u.url
+}
+
 func (u *WsUpstream) handle(request *Request) ([]byte, error) {
 	logrus.Infof("%v handled by %v", request.data.Method, u.url)
 
@@ -137,6 +176,37 @@ func (u *WsUpstream) handle(request *Request) ([]byte, error) {
 	case <-time.After(5 * time.Second): // TODO use a configurable timeout
 		return nil, TimeoutError
 	}
+}
+
+func (u *WsUpstream) updateBlockNumber() {
+	req := getBlockNumberRequest(u.chainId)
+	var latency int64
+	startTime := time.Now()
+	bts, err := u.handle(req)
+	endTime := time.Now()
+	if err != nil {
+		latency = math.MaxInt64
+	} else {
+		latency = int64(endTime.Sub(startTime))
+	}
+	var res BlockNumberResponseData
+	_ = json.Unmarshal(bts, &res)
+
+	blockNumber, _ := strconv.ParseInt(res.Result, 0, 64)
+	u.blockNumber = int(blockNumber)
+	u.latency = latency
+}
+
+func (u *WsUpstream) isAlive() bool {
+	return u.latency != math.MaxInt64
+}
+
+func (u *WsUpstream) getLatancy() int64 {
+	return u.latency
+}
+
+func (u *WsUpstream) getRpcUrl() string {
+	return u.url
 }
 
 func (u *WsUpstream) run(ctx context.Context) {

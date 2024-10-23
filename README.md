@@ -32,8 +32,8 @@ The gateway also acts as a load balancer across the nodes for [rpc](https://ethe
 - [x] Hot reload configuration. When change the configuration, you don't need restart the server, it will auto load the configuration.
 - [x] Graceful shutdown. When receive shutdown signal, it will shutdown gracefully after handle current requests without bad responses.
 - [x] Archive data router. Gateway will choose an archive node can serve API request for certain RPC methods older than 128 blocks.
+- [x] Maintain latency info and use fast nodes first.
 - [ ] Get chain rpc urls from [chainlist](https://chainlist.org/)
-- [ ] Maintain latency info and use fast nodes first.
 - [ ] Cache archive data to reduce rpc calls.
 
 ## Getting Started
@@ -76,10 +76,17 @@ chmod +x docker-run.sh
 
 ### Usage
 
-We call the `eth_blockNumber` method (When set `methodLimitationEnabled` true, or `eth_blockNumber` in `allowedMethods`)
+We have three main router:
+- http://localhost:3005/http/{chainId} : http endpoint
+- http://localhost:3005/ws/{chainId} : websocket endpoint
+- http://localhost:3005/health : returns JSON that describes information of all nodes including rpc url, latency, and etc.
+
+If you configured 1337 dev net in your config, you can do this below:
+
+We call the `eth_blockNumber` method (When set `methodLimitationEnabled` false, or `eth_blockNumber` in `allowedMethods`)
 
 ```
-curl -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:3005
+curl -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:3005/http/1337
 
 {"jsonrpc":"2.0","id":1,"result":"0x6c1100"}%
 ```
@@ -87,7 +94,7 @@ curl -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id
 And if we set `methodLimitationEnabled` true, and `eth_blockNumber` is not in `allowedMethods`, when we call `eth_blockNumber` the gateway will deny the reqeust.
 
 ```
-curl -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:3005
+curl -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:3005/http/1337
 
 {"error":{"code":-32602,"message":"not allowed method"},"id":1,"jsonrpc":"2.0"}%
 ```
