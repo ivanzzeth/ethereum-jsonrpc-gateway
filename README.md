@@ -91,7 +91,31 @@ curl -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id
 
 ## Configuration
 
-Copy `.config.sample.json` to `.config.json` then edit `.config.json`
+Copy `.config.sample.json` to `.config.json` then edit `.config.json`. The program supports multi-evm chains. The each key of JSON is chainId like below:
+
+```JSON
+{
+  "1337": {
+    "_upstreams": "support http, https, ws, wss",
+    "upstreams": ["http://localhost:8545"],
+  
+    "_oldTrieUrl": "for archive data, support http, https, or set empty string",
+    "oldTrieUrl": "",
+  
+    "_strategy": "support NAIVE, RACE, FALLBACK, BALANCING",
+    "strategy": "BALANCING",
+  
+    "_methodLimitationEnabled": "limit or not",
+    "methodLimitationEnabled": false,
+  
+    "_allowedMethods": "can be ignore if the limitation is not enabled",
+    "allowedMethods": ["eth_blockNumber"],
+  
+    "_contractWhitelist": "can be ignore if the limitation is not enabled",
+    "contractWhitelist": ["0x..."]
+  }
+}
+```
 
 ### upstreams
 
@@ -116,7 +140,7 @@ eg.
 
 ### strategy
 
-There are three strategies: `NAIVE`, `RACE`, `FALLBACK`. [Learn More](#proxy-strategy) about the Proxy Strategy.
+There are four strategies: `NAIVE`, `RACE`, `FALLBACK` and `BALANCING`. [Learn More](#proxy-strategy) about the Proxy Strategy.
 eg.
 
 ```
@@ -171,9 +195,15 @@ Depending on the level of complexity needed, there are three proxy strategies fo
   Fallback strategy proxy will retry failed request in other upstreams.
   <img src="./assets/strategy3.png">
 
+
+### Balancing
+
+- Balancing require upstreams count >= 2
+  Balancing strategy proxy will retry failed request in other upstreams as same as fallback strategy proxy, but at the same time, switch to next upstream when handling successful.
+
 ## Contributing
 
-1. Fork it (<https://github.com/HydroProtocol/ethereum-jsonrpc-gateway/fork>)
+1. Fork it (<https://github.com/ivanzzeth/ethereum-jsonrpc-gateway/fork>)
 2. Create your feature branch (`git checkout -b feature/fooBar`)
 3. Commit your changes (`git commit -am 'Add some fooBar'`)
 4. Push to the branch (`git push origin feature/fooBar`)
