@@ -15,13 +15,17 @@ var AllUpstreamsFailedError = fmt.Errorf("all upstream requests are failed")
 
 type Request struct {
 	logger               *logrus.Entry
+	chainId              uint64
 	data                 *RequestData
 	reqBytes             []byte
 	isArchiveDataRequest bool
 }
 
-func getBlockNumberRequest() *Request {
-	res, _ := newRequest([]byte(fmt.Sprintf(`{"params": [], "method": "eth_blockNumber", "id": %d, "jsonrpc": "2.0"}`, time.Now().Unix())))
+func getBlockNumberRequest(chainId uint64) *Request {
+	res, err := newRequest(chainId, []byte(fmt.Sprintf(`{"params": [], "method": "eth_blockNumber", "id": %d, "jsonrpc": "2.0"}`, time.Now().Unix())))
+	if err != nil {
+		panic(err)
+	}
 	return res
 }
 
@@ -98,7 +102,7 @@ func (r *Request) isOldTrieRequest(currentBlockNumber int) (res bool) {
 	return
 }
 
-func newRequest(reqBodyBytes []byte) (*Request, error) {
+func newRequest(chainId uint64, reqBodyBytes []byte) (*Request, error) {
 	logger := logrus.WithFields(logrus.Fields{"request_id": utils.RandStringRunes(8)})
 
 	var data RequestData
@@ -109,6 +113,7 @@ func newRequest(reqBodyBytes []byte) (*Request, error) {
 
 	req := &Request{
 		logger:   logger,
+		chainId:  chainId,
 		data:     &data,
 		reqBytes: reqBodyBytes,
 	}
@@ -125,11 +130,11 @@ func newRequest(reqBodyBytes []byte) (*Request, error) {
 
 func (r *Request) valid() error {
 
-	if !currentRunningConfig.MethodLimitationEnabled {
+	if !currentRunningConfig.Configs[r.chainId].MethodLimitationEnabled {
 		return nil
 	}
 
-	err := isValidCall(r.data)
+	err := isValidCall(r.chainId, r.data)
 
 	if err != nil {
 		r.logger.Printf("not valid, skip\n")

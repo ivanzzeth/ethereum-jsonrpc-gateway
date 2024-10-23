@@ -33,6 +33,7 @@ type wsProxyResponse struct {
 }
 
 type WsUpstream struct {
+	chainId      uint64
 	url          string
 	requestQueue chan *wsProxyRequest
 	nextID       int64     // proxy request id
@@ -41,6 +42,7 @@ type WsUpstream struct {
 
 type HttpUpstream struct {
 	ctx         context.Context
+	chainId     uint64
 	url         string
 	oldTrieUrl  string
 	blockNumber int
@@ -52,7 +54,7 @@ type BlockNumberResponseData struct {
 	Result  string `json:"result"`
 }
 
-func newUpstream(ctx context.Context, urlString string, oldTrieUrlString string) Upstream {
+func newUpstream(ctx context.Context, chainId uint64, urlString string, oldTrieUrlString string) Upstream {
 	u, err := url.Parse(urlString)
 
 	if err != nil {
@@ -72,9 +74,9 @@ func newUpstream(ctx context.Context, urlString string, oldTrieUrlString string)
 	var up Upstream
 
 	if u.Scheme == "http" || u.Scheme == "https" {
-		up = newHttpUpstream(ctx, u, ou)
+		up = newHttpUpstream(ctx, chainId, u, ou)
 	} else if u.Scheme == "ws" || u.Scheme == "wss" {
-		up = newWsStream(ctx, u)
+		up = newWsStream(ctx, chainId, u)
 	} else {
 		panic(fmt.Errorf("unsuportted url schema %s", u.Scheme))
 	}
@@ -236,16 +238,17 @@ func (u *WsUpstream) runConn(ctx context.Context, conn *websocket.Conn) {
 	<-connContext.Done()
 }
 
-func newHttpUpstream(ctx context.Context, url *url.URL, oldTrieUrl *url.URL) *HttpUpstream {
+func newHttpUpstream(ctx context.Context, chainId uint64, url *url.URL, oldTrieUrl *url.URL) *HttpUpstream {
 	up := &HttpUpstream{
 		ctx:        ctx,
+		chainId:    chainId,
 		url:        url.String(),
 		oldTrieUrl: oldTrieUrl.String(),
 	}
 
 	if url != oldTrieUrl {
 		setBlockNumber := func() {
-			req := getBlockNumberRequest()
+			req := getBlockNumberRequest(chainId)
 			bts, _ := up.handle(req)
 
 			var res BlockNumberResponseData
@@ -274,8 +277,9 @@ func newHttpUpstream(ctx context.Context, url *url.URL, oldTrieUrl *url.URL) *Ht
 	return up
 }
 
-func newWsStream(ctx context.Context, url *url.URL) *WsUpstream {
+func newWsStream(ctx context.Context, chainId uint64, url *url.URL) *WsUpstream {
 	upstream := &WsUpstream{
+		chainId:      chainId,
 		url:          url.String(),
 		requestQueue: make(chan *wsProxyRequest),
 		nextID:       time.Now().Unix(),

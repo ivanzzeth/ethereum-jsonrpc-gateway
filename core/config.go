@@ -11,7 +11,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Config struct {
+type Config map[uint64]ChainConfig
+
+func NewConfig() *Config {
+	c := Config(make(map[uint64]ChainConfig))
+	return &c
+}
+
+type ChainConfig struct {
 	Upstreams               []string `json:"upstreams"`
 	OldTrieUrl              string   `json:"oldTrieUrl"`
 	Strategy                string   `json:"strategy"`
@@ -21,8 +28,12 @@ type Config struct {
 }
 
 type RunningConfig struct {
-	ctx                     context.Context
-	stop                    context.CancelFunc
+	ctx     context.Context
+	stop    context.CancelFunc
+	Configs map[uint64]*RunningChainConfig
+}
+
+type RunningChainConfig struct {
 	Upstreams               []Upstream
 	Strategy                IStrategy
 	MethodLimitationEnabled bool
@@ -30,46 +41,128 @@ type RunningConfig struct {
 	allowedCallContracts    map[string]bool
 }
 
+func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) {
+	ctx, stop := context.WithCancel(ctx)
+
+	rcfg := &RunningConfig{
+		ctx:     ctx,
+		stop:    stop,
+		Configs: make(map[uint64]*RunningChainConfig),
+	}
+	currentRunningConfig = rcfg
+
+	for chainId, chainCfg := range *cfg {
+		rcfg.Configs[chainId] = &RunningChainConfig{}
+
+		for _, url := range chainCfg.Upstreams {
+
+			var primaryUrl string
+			var oldTrieUrl string
+
+			if chainCfg.OldTrieUrl != "" {
+				primaryUrl = url
+				oldTrieUrl = chainCfg.OldTrieUrl
+			} else {
+				primaryUrl = url
+				oldTrieUrl = url
+			}
+
+			rcfg.Configs[chainId].Upstreams = append(rcfg.Configs[chainId].Upstreams, newUpstream(ctx, chainId, primaryUrl, oldTrieUrl))
+		}
+
+		if len(rcfg.Configs[chainId].Upstreams) == 0 {
+			return nil, fmt.Errorf("need upstreams")
+		}
+
+		switch chainCfg.Strategy {
+		case "NAIVE":
+			if len(rcfg.Configs[chainId].Upstreams) > 1 {
+				panic(fmt.Errorf("naive proxy strategy require exact 1 upstream"))
+			}
+			rcfg.Configs[chainId].Strategy = newNaiveProxy()
+		case "RACE":
+			if len(rcfg.Configs[chainId].Upstreams) < 2 {
+				panic(fmt.Errorf("race proxy strategy require more than 1 upstream"))
+			}
+			rcfg.Configs[chainId].Strategy = newRaceProxy()
+		case "FALLBACK":
+			if len(rcfg.Configs[chainId].Upstreams) < 2 {
+				panic(fmt.Errorf("fallback proxy strategy require more than 1 upstream"))
+			}
+			rcfg.Configs[chainId].Strategy = newFallbackProxy()
+		case "BALANCING":
+			if len(rcfg.Configs[chainId].Upstreams) < 2 {
+				panic(fmt.Errorf("loadbalance proxy strategy require more than 1 upstream"))
+			}
+			rcfg.Configs[chainId].Strategy = newLoadBalanceFallbackProxy()
+		default:
+			return nil, fmt.Errorf("blank of unsupported strategy: %s", chainCfg.Strategy)
+		}
+
+		(rcfg.Configs[chainId]).MethodLimitationEnabled = chainCfg.MethodLimitationEnabled
+
+		rcfg.Configs[chainId].allowedMethods = make(map[string]bool)
+		for i := 0; i < len(chainCfg.AllowedMethods); i++ {
+			rcfg.Configs[chainId].allowedMethods[chainCfg.AllowedMethods[i]] = true
+		}
+
+		rcfg.Configs[chainId].allowedCallContracts = make(map[string]bool)
+		for i := 0; i < len(chainCfg.ContractWhitelist); i++ {
+			rcfg.Configs[chainId].allowedCallContracts[strings.ToLower(chainCfg.ContractWhitelist[i])] = true
+		}
+	}
+
+	return rcfg, nil
+}
+
 var currentConfigString string = ""
 var currentRunningConfig *RunningConfig
 
 func LoadConfig(ctx context.Context, quit chan bool) {
+	reloadConfig := func() {
+		config := NewConfig()
+
+		logrus.Debugf("load config from file")
+		bts, err := ioutil.ReadFile("./config.json")
+
+		if err != nil {
+			if currentConfigString == "" {
+				logrus.Fatal(err)
+			} else {
+				logrus.Warn("hot read config err, use old config")
+			}
+		}
+
+		if currentConfigString == "" || string(bts) != currentConfigString {
+			_ = json.Unmarshal(bts, config)
+
+			logrus.Infof("reloading config: %v", *config)
+			currentRunningConfig, err = BuildRunningConfigFromConfig(ctx, config)
+
+			if err != nil {
+				if currentConfigString == "" {
+					logrus.Fatal(err)
+				} else {
+					logrus.Warn("hot build config err, use old config")
+
+				}
+			}
+
+			logrus.Infof("reloading running config: %v", currentRunningConfig.Configs)
+
+			currentConfigString = string(bts)
+		}
+	}
+
+	// loading on init.
+	reloadConfig()
 
 	ticker := time.NewTicker(3 * time.Second)
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				config := &Config{}
-
-				logrus.Debugf("load config from file")
-				bts, err := ioutil.ReadFile("./config.json")
-
-				if err != nil {
-					if currentConfigString == "" {
-						logrus.Fatal(err)
-					} else {
-						logrus.Warn("hot read config err, use old config")
-						continue
-					}
-				}
-
-				if string(bts) != currentConfigString {
-					_ = json.Unmarshal(bts, config)
-
-					currentRunningConfig, err = BuildRunningConfigFromConfig(ctx, config)
-
-					if err != nil {
-						if currentConfigString == "" {
-							logrus.Fatal(err)
-						} else {
-							logrus.Warn("hot build config err, use old config")
-							continue
-						}
-					}
-
-					currentConfigString = string(bts)
-				}
+				reloadConfig()
 			case <-quit:
 				logrus.Info("quit loop config")
 				ticker.Stop()
@@ -80,71 +173,5 @@ func LoadConfig(ctx context.Context, quit chan bool) {
 }
 
 func BuildRunningConfigFromConfig(parentContext context.Context, cfg *Config) (*RunningConfig, error) {
-	ctx, stop := context.WithCancel(parentContext)
-
-	rcfg := &RunningConfig{
-		ctx:  ctx,
-		stop: stop,
-	}
-
-	currentRunningConfig = rcfg
-
-	for _, url := range cfg.Upstreams {
-
-		var primaryUrl string
-		var oldTrieUrl string
-
-		if cfg.OldTrieUrl != "" {
-			primaryUrl = url
-			oldTrieUrl = cfg.OldTrieUrl
-		} else {
-			primaryUrl = url
-			oldTrieUrl = url
-		}
-
-		rcfg.Upstreams = append(rcfg.Upstreams, newUpstream(ctx, primaryUrl, oldTrieUrl))
-	}
-
-	if len(rcfg.Upstreams) == 0 {
-		return nil, fmt.Errorf("need upstreams")
-	}
-
-	switch cfg.Strategy {
-	case "NAIVE":
-		if len(rcfg.Upstreams) > 1 {
-			panic(fmt.Errorf("naive proxy strategy require exact 1 upstream"))
-		}
-		rcfg.Strategy = newNaiveProxy()
-	case "RACE":
-		if len(rcfg.Upstreams) < 2 {
-			panic(fmt.Errorf("race proxy strategy require more than 1 upstream"))
-		}
-		rcfg.Strategy = newRaceProxy()
-	case "FALLBACK":
-		if len(rcfg.Upstreams) < 2 {
-			panic(fmt.Errorf("fallback proxy strategy require more than 1 upstream"))
-		}
-		rcfg.Strategy = newFallbackProxy()
-	case "BALANCING":
-		if len(rcfg.Upstreams) < 2 {
-			panic(fmt.Errorf("loadbalance proxy strategy require more than 1 upstream"))
-		}
-		rcfg.Strategy = newLoadBalanceFallbackProxy()
-	default:
-		return nil, fmt.Errorf("blank of unsupported strategy: %s", cfg.Strategy)
-	}
-
-	rcfg.MethodLimitationEnabled = cfg.MethodLimitationEnabled
-
-	rcfg.allowedMethods = make(map[string]bool)
-	for i := 0; i < len(cfg.AllowedMethods); i++ {
-		rcfg.allowedMethods[cfg.AllowedMethods[i]] = true
-	}
-
-	rcfg.allowedCallContracts = make(map[string]bool)
-	for i := 0; i < len(cfg.ContractWhitelist); i++ {
-		rcfg.allowedCallContracts[strings.ToLower(cfg.ContractWhitelist[i])] = true
-	}
-
-	return rcfg, nil
+	return NewRunningConfig(parentContext, cfg)
 }

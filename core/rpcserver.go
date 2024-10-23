@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -43,7 +45,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (h *Server) ServerWS(conn *websocket.Conn) error {
+func (h *Server) ServerWS(chainId uint64, conn *websocket.Conn) error {
 	defer conn.Close()
 
 	for {
@@ -59,13 +61,13 @@ func (h *Server) ServerWS(conn *websocket.Conn) error {
 		}
 
 		reqBodyBytes, _ := ioutil.ReadAll(r)
-		proxyRequest, err := newRequest(reqBodyBytes)
+		proxyRequest, err := newRequest(chainId, reqBodyBytes)
 
 		if err != nil {
 			return err
 		}
 
-		bts, err := currentRunningConfig.Strategy.handle(proxyRequest)
+		bts, err := currentRunningConfig.Configs[chainId].Strategy.handle(proxyRequest)
 
 		if err != nil {
 			bts = getErrorResponseBytes(proxyRequest.data.ID, err.Error())
@@ -94,8 +96,20 @@ func getErrorResponseBytes(id interface{}, reason interface{}) []byte {
 	return bts
 }
 
+// Support path:
+// 1. /ws/{chainId}
+// 2. /http/{chainId}
 func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if req.URL.Path == "/ws" {
+	if strings.HasPrefix(req.URL.Path, "/ws") {
+		chainIdStr := strings.Replace(req.URL.Path, "/ws/", "", 1)
+		chainId, err := strconv.ParseUint(chainIdStr, 10, 64)
+		if err != nil {
+			w.WriteHeader(400)
+			_, _ = w.Write([]byte("Invalid ChainId"))
+			Count("bad_request")
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, req, nil)
 
 		if err != nil {
@@ -103,7 +117,7 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		_ = h.ServerWS(conn)
+		_ = h.ServerWS(chainId, conn)
 		return
 	}
 
@@ -123,9 +137,25 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if !strings.HasPrefix(req.URL.Path, "/http") {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte("protocol Should Be http or ws"))
+		Count("bad_request")
+		return
+	}
+
+	chainIdStr := strings.Replace(req.URL.Path, "/http/", "", 1)
+	chainId, err := strconv.ParseUint(chainIdStr, 10, 64)
+	if err != nil {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte("Invalid ChainId"))
+		Count("bad_request")
+		return
+	}
+
 	startTime := time.Now()
 	reqBodyBytes, _ := ioutil.ReadAll(req.Body)
-	proxyRequest, err := newRequest(reqBodyBytes)
+	proxyRequest, err := newRequest(chainId, reqBodyBytes)
 
 	if err != nil {
 		w.WriteHeader(500)
@@ -142,7 +172,7 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		Time(proxyRequest.data.Method, float64(costInMs))
 	}()
 
-	bts, err := currentRunningConfig.Strategy.handle(proxyRequest)
+	bts, err := currentRunningConfig.Configs[chainId].Strategy.handle(proxyRequest)
 
 	var isArchiveRequestText string
 	if proxyRequest.isArchiveDataRequest {

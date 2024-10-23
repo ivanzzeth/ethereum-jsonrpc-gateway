@@ -28,22 +28,22 @@ var DecodeError = fmt.Errorf("decode error")
 var DeniedMethod = fmt.Errorf("not allowed method")
 var DeniedContract = fmt.Errorf("not allowed contract or address")
 
-func isAllowedMethod(method string) bool {
-	return currentRunningConfig.allowedMethods[method]
+func isAllowedMethod(chainId uint64, method string) bool {
+	return currentRunningConfig.Configs[chainId].allowedMethods[method]
 }
 
-func inWhitelist(contractAddress string) bool {
-	return currentRunningConfig.allowedCallContracts[strings.ToLower(contractAddress)]
+func inWhitelist(chainId uint64, contractAddress string) bool {
+	return currentRunningConfig.Configs[chainId].allowedCallContracts[strings.ToLower(contractAddress)]
 }
 
-func isValidCall(req *RequestData) (err error) {
+func isValidCall(chainId uint64, req *RequestData) (err error) {
 	defer func() {
 		if er := recover(); er != nil {
 			err = DecodeError
 		}
 	}()
 
-	if !isAllowedMethod(req.Method) {
+	if !isAllowedMethod(chainId, req.Method) {
 		return DeniedMethod
 	}
 
@@ -55,7 +55,7 @@ func isValidCall(req *RequestData) (err error) {
 	if req.Method == "eth_call" || req.Method == "eth_estimateGas" {
 		to := req.Params[0].(map[string]interface{})["to"].(string)
 
-		if !inWhitelist(to) {
+		if !inWhitelist(chainId, to) {
 			return DeniedContract
 		}
 
@@ -91,14 +91,14 @@ func isValidCall(req *RequestData) (err error) {
 			return DecodeError
 		}
 
-		if !inWhitelist(contractAddress) {
+		if !inWhitelist(chainId, contractAddress) {
 			return DeniedContract
 		}
 
 		return nil
 	}
 
-	if isAllowedMethod(req.Method) {
+	if isAllowedMethod(chainId, req.Method) {
 		return nil
 	}
 

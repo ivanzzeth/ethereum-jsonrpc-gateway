@@ -19,7 +19,8 @@ type IStrategy interface {
 var _ IStrategy = &NaiveProxy{}
 var _ IStrategy = &RaceProxy{}
 var _ IStrategy = &FallbackProxy{}
-var _ IStrategy = &LoadBalanceFallbackProxy{}
+
+// var _ IStrategy = &LoadBalanceFallbackProxy{}
 
 type NaiveProxy struct{}
 
@@ -28,7 +29,7 @@ func newNaiveProxy() *NaiveProxy {
 }
 
 func (p *NaiveProxy) handle(req *Request) ([]byte, error) {
-	upstream := currentRunningConfig.Upstreams[0]
+	upstream := currentRunningConfig.Configs[req.chainId].Upstreams[0]
 	bts, err := upstream.handle(req)
 
 	if err != nil {
@@ -51,11 +52,11 @@ func (p *RaceProxy) handle(req *Request) ([]byte, error) {
 		logrus.Debugf("geth_gateway %f", float64(time.Since(startAt))/1000000)
 	}()
 
-	successfulResponse := make(chan []byte, len(currentRunningConfig.Upstreams))
-	failedResponse := make(chan []byte, len(currentRunningConfig.Upstreams))
-	errorResponseUpstreams := make(chan Upstream, len(currentRunningConfig.Upstreams))
+	successfulResponse := make(chan []byte, len(currentRunningConfig.Configs[req.chainId].Upstreams))
+	failedResponse := make(chan []byte, len(currentRunningConfig.Configs[req.chainId].Upstreams))
+	errorResponseUpstreams := make(chan Upstream, len(currentRunningConfig.Configs[req.chainId].Upstreams))
 
-	for _, upstream := range currentRunningConfig.Upstreams {
+	for _, upstream := range currentRunningConfig.Configs[req.chainId].Upstreams {
 		go func(upstream Upstream) {
 			defer func() {
 				if err := recover(); err != nil {
@@ -87,7 +88,7 @@ func (p *RaceProxy) handle(req *Request) ([]byte, error) {
 
 	errorCount := 0
 
-	for errorCount < len(currentRunningConfig.Upstreams) {
+	for errorCount < len(currentRunningConfig.Configs[req.chainId].Upstreams) {
 		select {
 		case <-time.After(time.Second * 10):
 			req.logger.Debugf("%v Final Timeout\n", time.Now().Sub(startAt))
@@ -110,46 +111,68 @@ func (p *RaceProxy) handle(req *Request) ([]byte, error) {
 }
 
 type FallbackProxy struct {
+	status sync.Map
+}
+
+type FallbackStatus struct {
 	currentUpstreamIndex *atomic.Value
 	upsteamStatus        *sync.Map
 }
 
 func newFallbackProxy() *FallbackProxy {
-	v := &atomic.Value{}
-	v.Store(0)
+	logrus.Infof("using fallback proxy for chain")
 
-	p := &FallbackProxy{
-		currentUpstreamIndex: v,
-		upsteamStatus:        &sync.Map{},
+	p := &FallbackProxy{}
+
+	for chainId, cfg := range currentRunningConfig.Configs {
+		v := &atomic.Value{}
+		v.Store(0)
+		status := &FallbackStatus{
+			currentUpstreamIndex: v,
+			upsteamStatus:        &sync.Map{},
+		}
+		for i := 0; i < len(cfg.Upstreams); i++ {
+			status.upsteamStatus.Store(i, true)
+		}
+
+		logrus.Infof("fallback proxy setup chainId %v", chainId)
+		p.status.Store(chainId, status)
 	}
 
-	for i := 0; i < len(currentRunningConfig.Upstreams); i++ {
-		p.upsteamStatus.Store(i, true)
-	}
+	logrus.Infof("setup fallback proxy ended, chains %v, config: %v", len(currentRunningConfig.Configs), *currentRunningConfig)
 
 	return p
 }
 
 func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
-	for i := 0; i < len(currentRunningConfig.Upstreams); i++ {
-		index := p.currentUpstreamIndex.Load().(int)
+	statusVal, ok := p.status.Load(req.chainId)
+	if !ok {
+		return nil, fmt.Errorf("chain not supported")
+	}
 
-		value, _ := p.upsteamStatus.Load(index)
+	status := statusVal.(*FallbackStatus)
+
+	cfg := currentRunningConfig.Configs[req.chainId]
+
+	for i := 0; i < len(cfg.Upstreams); i++ {
+		index := status.currentUpstreamIndex.Load().(int)
+
+		value, _ := status.upsteamStatus.Load(index)
 		isUpstreamValid := value.(bool)
 
 		if isUpstreamValid {
-			bts, err := currentRunningConfig.Upstreams[index].handle(req)
+			bts, err := cfg.Upstreams[index].handle(req)
 
 			if err != nil {
-				nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(currentRunningConfig.Upstreams))))
-				p.currentUpstreamIndex.Store(nextUpstreamIndex)
-				p.upsteamStatus.Store(i, false)
+				nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(cfg.Upstreams))))
+				status.currentUpstreamIndex.Store(nextUpstreamIndex)
+				status.upsteamStatus.Store(i, false)
 
 				logrus.Infof("upstream %d return err, switch to %d", index, nextUpstreamIndex)
 
 				go func(i int) {
 					<-time.After(5 * time.Second)
-					p.upsteamStatus.Store(i, true)
+					status.upsteamStatus.Store(i, true)
 				}(index)
 
 				continue
@@ -163,47 +186,61 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 }
 
 type LoadBalanceFallbackProxy struct {
-	currentUpstreamIndex *atomic.Value
-	upsteamStatus        *sync.Map
+	status sync.Map
 }
 
 func newLoadBalanceFallbackProxy() *LoadBalanceFallbackProxy {
-	v := &atomic.Value{}
-	v.Store(0)
+	logrus.Infof("using load balancing proxy for chain")
 
-	p := &LoadBalanceFallbackProxy{
-		currentUpstreamIndex: v,
-		upsteamStatus:        &sync.Map{},
+	p := &LoadBalanceFallbackProxy{}
+
+	for chainId, cfg := range currentRunningConfig.Configs {
+		v := &atomic.Value{}
+		v.Store(0)
+		status := &FallbackStatus{
+			currentUpstreamIndex: v,
+			upsteamStatus:        &sync.Map{},
+		}
+		for i := 0; i < len(cfg.Upstreams); i++ {
+			status.upsteamStatus.Store(i, true)
+		}
+
+		logrus.Infof("load balancing proxy setup chainId %v", chainId)
+		p.status.Store(chainId, status)
 	}
 
-	for i := 0; i < len(currentRunningConfig.Upstreams); i++ {
-		p.upsteamStatus.Store(i, true)
-	}
+	logrus.Infof("setup load balancing proxy ended, chains %v, config: %v", len(currentRunningConfig.Configs), *currentRunningConfig)
 
 	return p
 }
 
 func (p *LoadBalanceFallbackProxy) handle(req *Request) ([]byte, error) {
-	for i := 0; i < len(currentRunningConfig.Upstreams); i++ {
-		index := p.currentUpstreamIndex.Load().(int)
+	statusVal, ok := p.status.Load(req.chainId)
+	if !ok {
+		return nil, fmt.Errorf("chain not supported")
+	}
 
-		value, _ := p.upsteamStatus.Load(index)
+	status := statusVal.(*FallbackStatus)
+
+	cfg := currentRunningConfig.Configs[req.chainId]
+
+	initialIndex := status.currentUpstreamIndex.Load().(int)
+
+	for i := 0; i < len(cfg.Upstreams); i++ {
+		index := status.currentUpstreamIndex.Load().(int)
+		if i != 0 && index == initialIndex {
+			break
+		}
+		value, _ := status.upsteamStatus.Load(index)
 		isUpstreamValid := value.(bool)
 
 		if isUpstreamValid {
-			bts, err := currentRunningConfig.Upstreams[index].handle(req)
+			bts, err := cfg.Upstreams[index].handle(req)
 
-			nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(currentRunningConfig.Upstreams))))
-			p.currentUpstreamIndex.Store(nextUpstreamIndex)
+			nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(cfg.Upstreams))))
+			status.currentUpstreamIndex.Store(nextUpstreamIndex)
 			logrus.Infof("upstream %d load balancing, then switch to %d", index, nextUpstreamIndex)
-
 			if err != nil {
-				p.upsteamStatus.Store(i, false)
-				go func(i int) {
-					<-time.After(5 * time.Second)
-					p.upsteamStatus.Store(i, true)
-				}(index)
-
 				continue
 			} else {
 				return bts, nil
