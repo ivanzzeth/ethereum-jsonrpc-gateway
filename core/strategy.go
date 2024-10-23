@@ -19,6 +19,7 @@ type IStrategy interface {
 var _ IStrategy = &NaiveProxy{}
 var _ IStrategy = &RaceProxy{}
 var _ IStrategy = &FallbackProxy{}
+var _ IStrategy = &LoadBalanceFallbackProxy{}
 
 type NaiveProxy struct{}
 
