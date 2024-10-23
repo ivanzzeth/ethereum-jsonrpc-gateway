@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -163,7 +164,7 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 		if isUpstreamValid {
 			bts, err := cfg.Upstreams[index].handle(req)
 
-			if err != nil {
+			retry := func() {
 				nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(cfg.Upstreams))))
 				status.currentUpstreamIndex.Store(nextUpstreamIndex)
 				status.upsteamStatus.Store(i, false)
@@ -174,9 +175,22 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 					<-time.After(5 * time.Second)
 					status.upsteamStatus.Store(i, true)
 				}(index)
-
+			}
+			if err != nil {
+				retry()
 				continue
 			} else {
+				resp := &JsonRpcResponse{}
+				err = json.Unmarshal(bts, resp)
+				if err != nil {
+					logrus.Errorf("JsonRpcResponse unmarsharling failed: %v", err)
+					retry()
+					continue
+				}
+				if resp.Err.Code != 0 {
+					retry()
+					continue
+				}
 				return bts, nil
 			}
 		}
@@ -237,12 +251,28 @@ func (p *LoadBalanceFallbackProxy) handle(req *Request) ([]byte, error) {
 		if isUpstreamValid {
 			bts, err := cfg.Upstreams[index].handle(req)
 
-			nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(cfg.Upstreams))))
-			status.currentUpstreamIndex.Store(nextUpstreamIndex)
-			logrus.Infof("upstream %d load balancing, then switch to %d", index, nextUpstreamIndex)
+			switchFunc := func() {
+				nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(cfg.Upstreams))))
+				status.currentUpstreamIndex.Store(nextUpstreamIndex)
+				logrus.Infof("upstream %d load balancing, then switch to %d", index, nextUpstreamIndex)
+			}
+
+			switchFunc()
+
 			if err != nil {
 				continue
 			} else {
+				resp := &JsonRpcResponse{}
+				err = json.Unmarshal(bts, resp)
+				if err != nil {
+					logrus.Errorf("JsonRpcResponse unmarsharling failed: %v", err)
+					switchFunc()
+					continue
+				}
+				if resp.Err.Code != 0 {
+					switchFunc()
+					continue
+				}
 				return bts, nil
 			}
 		}

@@ -9,13 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-type RequestData struct {
-	JsonRpc string        `json:"jsonrpc"`
-	ID      int64         `json:"id"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-}
-
 // eth_call
 // eth_estimateGas
 // eth_getLogs
