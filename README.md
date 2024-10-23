@@ -25,13 +25,16 @@ The gateway also acts as a load balancer across the nodes for [rpc](https://ethe
 
 ## Features
 
-- Permisson check - Methods filter. You can set allowed methods in configuration, and only allowed methods can be called.
-- Permisson check - Smart Contract whitelist. Contracts only in this whitelist can be called.
-- HTTP and Websocket connection. Support http, http upstream, websocket, websocket upstream and websocket reconnection.
-- Server proxy strategies. There are three strategies you can choose: NAIVE, RACE, and FALLBACK.
-- Hot reload configuration. When change the configuration, you don't need restart the server, it will auto load the configuration.
-- Graceful shutdown. When receive shutdown signal, it will shutdown gracefully after handle current requests without bad responses.
-- Archive data router. Gateway will choose an archive node can serve API request for certain RPC methods older than 128 blocks.
+- [x] Permisson check - Methods filter. You can set allowed methods in configuration, and only allowed methods can be called.
+- [x] Permisson check - Smart Contract whitelist. Contracts only in this whitelist can be called.
+- [x] HTTP and Websocket connection. Support http, http upstream, websocket, websocket upstream and websocket reconnection.
+- [x] Server proxy strategies. There are three strategies you can choose: NAIVE, RACE, and FALLBACK.
+- [x] Hot reload configuration. When change the configuration, you don't need restart the server, it will auto load the configuration.
+- [x] Graceful shutdown. When receive shutdown signal, it will shutdown gracefully after handle current requests without bad responses.
+- [x] Archive data router. Gateway will choose an archive node can serve API request for certain RPC methods older than 128 blocks.
+- [ ] Get chain rpc urls from [chainlist](https://chainlist.org/)
+- [ ] Maintain latency info and use fast nodes first.
+- [ ] Cache archive data to reduce rpc calls.
 
 ## Getting Started
 
@@ -200,6 +203,13 @@ Depending on the level of complexity needed, there are three proxy strategies fo
 
 - Balancing require upstreams count >= 2
   Balancing strategy proxy will retry failed request in other upstreams as same as fallback strategy proxy, but at the same time, switch to next upstream when handling successful.
+
+
+### Relay
+
+TODO:
+- Relay require upstreams count >= 2
+  Relay strategy proxy will send requests to at least 2/3 nodes only if method is `eth_sendRawTransaction` and with Balancing strategy.
 
 ## Contributing
 
