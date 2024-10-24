@@ -33,8 +33,8 @@ The gateway also acts as a load balancer across the nodes for [rpc](https://ethe
 - [x] Graceful shutdown. When receive shutdown signal, it will shutdown gracefully after handle current requests without bad responses.
 - [x] Archive data router. Gateway will choose an archive node can serve API request for certain RPC methods older than 128 blocks.
 - [x] Maintain latency info and use fast nodes first.
+- [x] Cache archive data for http protocol to reduce rpc calls.
 - [ ] Get chain rpc urls from [chainlist](https://chainlist.org/)
-- [ ] Cache archive data to reduce rpc calls.
 
 ## Getting Started
 
