@@ -127,6 +127,8 @@ Copy `.config.sample.json` to `.config.json` then edit `.config.json`. The progr
 }
 ```
 
+`config.public.json` is also provided by default, glad to see anyone to contribute your public full node here.
+
 ### upstreams
 
 Ethereum node upstream urls. You can set multiple nodes in this list. And upstream support http, https, ws, wss.
