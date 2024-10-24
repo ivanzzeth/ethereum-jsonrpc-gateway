@@ -3,7 +3,21 @@
     "upstreams": [
       "https://polygon.drpc.org",
       "https://polygon-rpc.com",
+      "https://1rpc.io/matic",
       "https://polygon-bor-rpc.publicnode.com"
+    ],
+    "oldTrieUrls": "",
+    "strategy": "BALANCING",
+    "methodLimitationEnabled": false,
+    "allowedMethods": ["eth_blockNumber"],
+    "contractWhitelist": ["0x..."]
+  },
+  "204": {
+    "upstreams": [
+      "wss://opbnb-rpc.publicnode.com",
+      "https://opbnb-mainnet-rpc.bnbchain.org",
+      "wss://opbnb-mainnet.4everland.org/ws/v1/37fa9972c1b1cd5fab542c7bdd4cde2f",
+      "https://opbnb-mainnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3"
     ],
     "oldTrieUrls": "",
     "strategy": "BALANCING",
@@ -16,6 +30,8 @@
       "https://api.zan.top/base-mainnet",
       "wss://base.callstaticrpc.com",
       "wss://base-rpc.publicnode.com",
+      "wss://base.gateway.tenderly.co",
+      "https://base.blockpi.network/v1/rpc/public",
       "https://base-mainnet.public.blastapi.io",
       "https://base-pokt.nodies.app"
     ],

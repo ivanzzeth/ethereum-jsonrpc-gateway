@@ -17,6 +17,7 @@ FROM alpine:3.20
 RUN mkdir /lib64 && ln -s /lib/libc.musl-x86_64.so.1 /lib64/ld-linux-x86-64.so.2
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /usr/local/bin/app /usr/local/bin/app
+COPY --from=builder /usr/src/app/config.public.json /usr/src/app/config.json
 
 WORKDIR /usr/src/app
 
