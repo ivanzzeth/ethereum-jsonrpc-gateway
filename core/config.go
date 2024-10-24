@@ -7,15 +7,16 @@ import (
 	"io/ioutil"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 )
 
-type Config map[uint64]ChainConfig
+type Config map[uint64]*ChainConfig
 
 func NewConfig() *Config {
-	c := Config(make(map[uint64]ChainConfig))
+	c := Config(make(map[uint64]*ChainConfig))
 	return &c
 }
 
@@ -48,11 +49,9 @@ func (c *RunningConfig) healthCheck() {
 			for _, cfg := range c.Configs {
 				cfg.healthCheck()
 
-				time.Sleep(10 * time.Second)
+				time.Sleep(10 * time.Minute)
 			}
 		}
-
-		check()
 
 		for {
 			select {
@@ -75,9 +74,16 @@ type RunningChainConfig struct {
 }
 
 func (c *RunningChainConfig) healthCheck() {
+	var wg sync.WaitGroup
 	for _, up := range c.Upstreams {
-		up.updateBlockNumber()
+		wg.Add(1)
+		go func(up Upstream) {
+			up.updateBlockNumber()
+			wg.Done()
+		}(up)
 	}
+
+	wg.Wait()
 
 	sort.Slice(c.Upstreams, func(i, j int) bool {
 		return c.Upstreams[i].getLatancy() <= c.Upstreams[j].getLatancy()
@@ -86,7 +92,7 @@ func (c *RunningChainConfig) healthCheck() {
 	logrus.Infof("running chain upstreams updated")
 }
 
-func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) {
+func NewRunningConfig(ctx context.Context, cfg Config) (*RunningConfig, error) {
 	oldOne := currentRunningConfig
 	if oldOne != nil {
 		defer oldOne.close()
@@ -101,10 +107,33 @@ func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) 
 	}
 	currentRunningConfig = rcfg
 
-	for chainId, chainCfg := range *cfg {
+	chainlist := getChainList()
+
+	for chainId, rpcs := range chainlist {
+		_, ok := cfg[chainId]
+		if !ok {
+			strategy := "NAIVE"
+			if len(rpcs) >= 2 {
+				strategy = "BALANCING"
+			}
+			if len(rpcs) > 0 {
+				cfg[chainId] = &ChainConfig{
+					Upstreams: rpcs,
+					Strategy:  strategy,
+				}
+			}
+		} else if len(rpcs) > 0 {
+			cfg[chainId].Upstreams = append(cfg[chainId].Upstreams, rpcs...)
+		}
+
+		// logrus.Infof("Setup chain %v: %v", chainId, rpcs)
+	}
+
+	for chainId, chainCfg := range cfg {
 		rcfg.Configs[chainId] = &RunningChainConfig{}
 
-		for _, url := range chainCfg.Upstreams {
+		upstreams := chainCfg.Upstreams
+		for _, url := range upstreams {
 
 			var primaryUrl string
 			var oldTrieUrl string
@@ -117,6 +146,8 @@ func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) 
 				oldTrieUrl = url
 			}
 
+			// logrus.Infof("Setup chain %v upstream: %v(%v)", chainId, primaryUrl, oldTrieUrl)
+
 			rcfg.Configs[chainId].Upstreams = append(rcfg.Configs[chainId].Upstreams, newUpstream(ctx, chainId, primaryUrl, oldTrieUrl))
 		}
 
@@ -124,7 +155,7 @@ func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) 
 			return nil, fmt.Errorf("need upstreams")
 		}
 
-		go rcfg.healthCheck()
+		// go rcfg.healthCheck()
 
 		switch chainCfg.Strategy {
 		case "NAIVE":
@@ -225,5 +256,5 @@ func LoadConfig(ctx context.Context, quit chan bool) {
 }
 
 func BuildRunningConfigFromConfig(parentContext context.Context, cfg *Config) (*RunningConfig, error) {
-	return NewRunningConfig(parentContext, cfg)
+	return NewRunningConfig(parentContext, *cfg)
 }

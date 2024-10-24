@@ -6,3 +6,4 @@ bin
 .vscode
 main
 ethereum-jsonrpc-gateway
+log.txt

@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/HydroProtocol/ethereum-jsonrpc-gateway/core"
+	"github.com/ivanzzeth/ethereum-jsonrpc-gateway/core"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

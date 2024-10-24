@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/HydroProtocol/ethereum-jsonrpc-gateway/utils"
+	"github.com/ivanzzeth/ethereum-jsonrpc-gateway/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -121,7 +121,7 @@ type FallbackStatus struct {
 }
 
 func newFallbackProxy() *FallbackProxy {
-	logrus.Infof("using fallback proxy for chain")
+	// logrus.Infof("using fallback proxy for chain")
 
 	p := &FallbackProxy{}
 
@@ -140,7 +140,7 @@ func newFallbackProxy() *FallbackProxy {
 		p.status.Store(chainId, status)
 	}
 
-	logrus.Infof("setup fallback proxy ended, chains %v, config: %v", len(currentRunningConfig.Configs), *currentRunningConfig)
+	// logrus.Infof("setup fallback proxy ended, chains %v, config: %v", len(currentRunningConfig.Configs), *currentRunningConfig)
 
 	return p
 }
@@ -204,7 +204,7 @@ type LoadBalanceFallbackProxy struct {
 }
 
 func newLoadBalanceFallbackProxy() *LoadBalanceFallbackProxy {
-	logrus.Infof("using load balancing proxy for chain")
+	// logrus.Infof("using load balancing proxy for chain")
 
 	p := &LoadBalanceFallbackProxy{}
 
@@ -219,11 +219,11 @@ func newLoadBalanceFallbackProxy() *LoadBalanceFallbackProxy {
 			status.upsteamStatus.Store(i, true)
 		}
 
-		logrus.Infof("load balancing proxy setup chainId %v", chainId)
+		// logrus.Infof("load balancing proxy setup chainId %v", chainId)
 		p.status.Store(chainId, status)
 	}
 
-	logrus.Infof("setup load balancing proxy ended, chains %v, config: %v", len(currentRunningConfig.Configs), *currentRunningConfig)
+	// logrus.Infof("setup load balancing proxy ended, chains %v, config: %v", len(currentRunningConfig.Configs), *currentRunningConfig)
 
 	return p
 }

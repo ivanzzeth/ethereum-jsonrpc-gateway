@@ -1,4 +1,4 @@
-module github.com/HydroProtocol/ethereum-jsonrpc-gateway
+module github.com/ivanzzeth/ethereum-jsonrpc-gateway
 
 go 1.13
 
@@ -10,5 +10,6 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
+	github.com/tidwall/gjson v1.18.0
 	golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae // indirect
 )

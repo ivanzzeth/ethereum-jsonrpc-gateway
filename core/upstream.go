@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,17 +44,23 @@ type WsUpstream struct {
 	requestQueue chan *wsProxyRequest
 	nextID       int64     // proxy request id
 	requests     *sync.Map // proxy request id => proxy request
-	blockNumber  int
-	latency      int64
+
+	nextUpdateTime time.Time
+	updateMutext   sync.Mutex
+	blockNumber    int
+	latency        int64
 }
 
 type HttpUpstream struct {
-	ctx         context.Context
-	chainId     uint64
-	url         string
-	oldTrieUrl  string
-	blockNumber int
-	latency     int64
+	ctx        context.Context
+	chainId    uint64
+	url        string
+	oldTrieUrl string
+
+	nextUpdateTime time.Time
+	updateMutext   sync.Mutex
+	blockNumber    int
+	latency        int64
 }
 
 type BlockNumberResponseData struct {
@@ -94,6 +101,11 @@ func newUpstream(ctx context.Context, chainId uint64, urlString string, oldTrieU
 
 func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
 	logrus.Infof("%v handled by %v", request.data.Method, u.url)
+	u.updateBlockNumber()
+
+	if !u.isAlive() {
+		return nil, fmt.Errorf("service temporarily not available")
+	}
 
 	ul := u.url
 
@@ -107,7 +119,7 @@ func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
 	res, err := httpClient.Do(upstreamReq)
 
 	if err != nil {
-		logrus.Errorf("http upstream client do request error: %+v", err)
+		logrus.Warnf("http upstream client do request error: %+v", err)
 		return nil, err
 	}
 
@@ -122,22 +134,31 @@ func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
 }
 
 func (u *HttpUpstream) updateBlockNumber() {
-	req := getBlockNumberRequest(u.chainId)
-	var latency int64
-	startTime := time.Now()
-	bts, err := u.handle(req)
-	endTime := time.Now()
-	if err != nil {
-		latency = math.MaxInt64
-	} else {
-		latency = int64(endTime.Sub(startTime))
-	}
-	var res BlockNumberResponseData
-	_ = json.Unmarshal(bts, &res)
+	u.updateMutext.Lock()
+	defer u.updateMutext.Unlock()
 
-	blockNumber, _ := strconv.ParseInt(res.Result, 0, 64)
-	u.blockNumber = int(blockNumber)
-	u.latency = latency
+	if u.nextUpdateTime.Before(time.Now()) {
+		logrus.Infof("update %v nodeInfo", u.url)
+		req := getBlockNumberRequest(u.chainId)
+		var latency int64
+		startTime := time.Now()
+		bts, err := u.handle(req)
+		endTime := time.Now()
+		if err != nil {
+			latency = math.MaxInt64
+		} else {
+			latency = int64(endTime.Sub(startTime))
+		}
+		var res BlockNumberResponseData
+		_ = json.Unmarshal(bts, &res)
+
+		blockNumber, _ := strconv.ParseInt(res.Result, 0, 64)
+		u.blockNumber = int(blockNumber)
+		u.latency = latency
+
+		u.nextUpdateTime = u.nextUpdateTime.Add(1 * time.Minute)
+	}
+
 }
 
 func (u *HttpUpstream) isAlive() bool {
@@ -154,6 +175,11 @@ func (u *HttpUpstream) getRpcUrl() string {
 
 func (u *WsUpstream) handle(request *Request) ([]byte, error) {
 	logrus.Infof("%v handled by %v", request.data.Method, u.url)
+	u.updateBlockNumber()
+
+	if !u.isAlive() {
+		return nil, fmt.Errorf("service temporarily not available")
+	}
 
 	proxyRequest := &wsProxyRequest{
 		request,
@@ -179,22 +205,29 @@ func (u *WsUpstream) handle(request *Request) ([]byte, error) {
 }
 
 func (u *WsUpstream) updateBlockNumber() {
-	req := getBlockNumberRequest(u.chainId)
-	var latency int64
-	startTime := time.Now()
-	bts, err := u.handle(req)
-	endTime := time.Now()
-	if err != nil {
-		latency = math.MaxInt64
-	} else {
-		latency = int64(endTime.Sub(startTime))
-	}
-	var res BlockNumberResponseData
-	_ = json.Unmarshal(bts, &res)
+	u.updateMutext.Lock()
+	defer u.updateMutext.Unlock()
+	if u.nextUpdateTime.Before(time.Now()) {
+		logrus.Infof("update %v nodeInfo", u.url)
+		req := getBlockNumberRequest(u.chainId)
+		var latency int64
+		startTime := time.Now()
+		bts, err := u.handle(req)
+		endTime := time.Now()
+		if err != nil {
+			latency = math.MaxInt64
+		} else {
+			latency = int64(endTime.Sub(startTime))
+		}
+		var res BlockNumberResponseData
+		_ = json.Unmarshal(bts, &res)
 
-	blockNumber, _ := strconv.ParseInt(res.Result, 0, 64)
-	u.blockNumber = int(blockNumber)
-	u.latency = latency
+		blockNumber, _ := strconv.ParseInt(res.Result, 0, 64)
+		u.blockNumber = int(blockNumber)
+		u.latency = latency
+
+		u.nextUpdateTime = u.nextUpdateTime.Add(1 * time.Minute)
+	}
 }
 
 func (u *WsUpstream) isAlive() bool {
@@ -217,8 +250,13 @@ func (u *WsUpstream) run(ctx context.Context) {
 		conn, _, err := websocket.DefaultDialer.Dial(u.url, nil)
 
 		if err != nil {
-			seconds := 5 // TODO configurable
-			logrus.Errorf("ws upstream %s %v, will retry after %d seconds", u.url, err, seconds)
+			errStr := err.Error()
+			if strings.Contains(errStr, "no such host") || strings.Contains(errStr, "no route to host") {
+				u.latency = math.MaxInt64
+				break
+			}
+			seconds := 20 // TODO configurable
+			logrus.Warnf("ws upstream %s %v, will retry after %d seconds", u.url, err, seconds)
 
 			select {
 			case <-ctx.Done():
@@ -285,7 +323,7 @@ func (u *WsUpstream) runConn(ctx context.Context, conn *websocket.Conn) {
 			t, p, err := conn.ReadMessage()
 
 			if err != nil {
-				logrus.Errorf("read response from upstream failed %v", err)
+				logrus.Errorf("read response from upstream %v failed %v", u.url, err)
 				break
 			}
 
