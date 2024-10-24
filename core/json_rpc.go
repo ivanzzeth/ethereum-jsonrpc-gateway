@@ -2,7 +2,7 @@ package core
 
 type RequestData struct {
 	JsonRpc string        `json:"jsonrpc"`
-	ID      int64         `json:"id"`
+	ID      int64         `json:"id,omitempty"`
 	Method  string        `json:"method"`
 	Params  []interface{} `json:"params"`
 }

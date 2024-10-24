@@ -100,6 +100,7 @@ func getErrorResponseBytes(id interface{}, reason interface{}) []byte {
 // 1. /ws/{chainId}
 // 2. /http/{chainId}
 func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var err error
 	if strings.HasPrefix(req.URL.Path, "/ws") {
 		chainIdStr := strings.Replace(req.URL.Path, "/ws/", "", 1)
 		chainId, err := strconv.ParseUint(chainIdStr, 10, 64)
@@ -165,11 +166,39 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	proxyRequest, err := newRequest(chainId, reqBodyBytes)
 
 	if err != nil {
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write(getErrorResponseBytes(proxyRequest.data.ID, err.Error()))
 		logrus.Errorf("Req from %s %s 500 %s", req.RemoteAddr, proxyRequest.data.Method, err.Error())
 		return
 	}
+
+	copiedJsonRpcReq := &RequestData{
+		JsonRpc: proxyRequest.data.JsonRpc,
+		Method:  proxyRequest.data.Method,
+		Params:  proxyRequest.data.Params,
+	}
+	reqKey, err := json.Marshal(copiedJsonRpcReq)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(getErrorResponseBytes(proxyRequest.data.ID, err.Error()))
+		logrus.Errorf("Req from %s %s 500 %s", req.RemoteAddr, proxyRequest.data.Method, err.Error())
+		return
+	}
+
+	var isArchiveRequestText string
+	if proxyRequest.isArchiveDataRequest {
+		isArchiveRequestText = "(ArchiveData)"
+		logrus.Info(string(proxyRequest.reqBytes))
+	}
+
+	if val, ok := getCache().Get(string(reqKey)); ok {
+		_, _ = w.Write(val.([]byte))
+		logrus.Infof("Req%s from %s %s 200 hit cache", isArchiveRequestText, req.RemoteAddr, proxyRequest.data.Method)
+
+		return
+	}
+
+	var btsResp []byte
 
 	defer func() {
 		costInMs := time.Since(startTime).Nanoseconds() / 1000000
@@ -177,15 +206,17 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			logrus.Infof("slow request, method: %s, cost: %d", proxyRequest.data.Method, costInMs)
 		}
 		Time(proxyRequest.data.Method, float64(costInMs))
+
+		if err == nil {
+			// cache result
+			if proxyRequest.isArchiveDataRequest {
+				logrus.Infof("Req%s from %s %s 200 add cache", isArchiveRequestText, req.RemoteAddr, proxyRequest.data.Method)
+				getCache().Add(string(reqKey), btsResp)
+			}
+		}
 	}()
 
-	bts, err := currentRunningConfig.Configs[chainId].Strategy.handle(proxyRequest)
-
-	var isArchiveRequestText string
-	if proxyRequest.isArchiveDataRequest {
-		isArchiveRequestText = "(ArchiveData)"
-		logrus.Info(string(proxyRequest.reqBytes))
-	}
+	btsResp, err = currentRunningConfig.Configs[chainId].Strategy.handle(proxyRequest)
 
 	if err != nil {
 		w.WriteHeader(500)
@@ -194,6 +225,6 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	_, _ = w.Write(bts)
+	_, _ = w.Write(btsResp)
 	logrus.Infof("Req%s from %s %s 200", isArchiveRequestText, req.RemoteAddr, proxyRequest.data.Method)
 }
