@@ -1,0 +1,28 @@
+{
+  "137": {
+    "upstreams": [
+      "https://polygon.drpc.org",
+      "https://polygon-rpc.com",
+      "https://polygon-bor-rpc.publicnode.com"
+    ],
+    "oldTrieUrls": "",
+    "strategy": "BALANCING",
+    "methodLimitationEnabled": false,
+    "allowedMethods": ["eth_blockNumber"],
+    "contractWhitelist": ["0x..."]
+  },
+  "8453": {
+    "upstreams": [
+      "https://api.zan.top/base-mainnet",
+      "wss://base.callstaticrpc.com",
+      "wss://base-rpc.publicnode.com",
+      "https://base-mainnet.public.blastapi.io",
+      "https://base-pokt.nodies.app"
+    ],
+    "oldTrieUrls": "",
+    "strategy": "BALANCING",
+    "methodLimitationEnabled": false,
+    "allowedMethods": ["eth_blockNumber"],
+    "contractWhitelist": ["0x..."]
+  }
+}
