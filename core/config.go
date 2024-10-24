@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -75,9 +76,17 @@ type RunningChainConfig struct {
 }
 
 func (c *RunningChainConfig) healthCheck() {
+	var wg sync.WaitGroup
 	for _, up := range c.Upstreams {
-		up.updateBlockNumber()
+		wg.Add(1)
+
+		go func(up Upstream) {
+			up.updateBlockNumber()
+			wg.Done()
+		}(up)
 	}
+
+	wg.Wait()
 
 	sort.Slice(c.Upstreams, func(i, j int) bool {
 		return c.Upstreams[i].getLatancy() <= c.Upstreams[j].getLatancy()

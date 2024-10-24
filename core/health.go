@@ -9,6 +9,7 @@ import (
 type NodeInfo struct {
 	RpcUrl  string `json:"rpcUrl"` // only first 20 chars
 	Latency string `json:"latency"`
+	Height  uint64 `json:"height"`
 	IsAlive bool   `json:"isAlive"`
 }
 
@@ -32,6 +33,7 @@ func getHealthInfo() HealthInfo {
 
 				nodesInfo = append(nodesInfo, NodeInfo{
 					RpcUrl:  url,
+					Height:  up.getBlockNumber(),
 					Latency: fmt.Sprintf("%s", time.Duration(up.getLatancy())),
 					IsAlive: up.isAlive(),
 				})

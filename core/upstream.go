@@ -23,6 +23,7 @@ type Upstream interface {
 	handle(*Request) ([]byte, error)
 	updateBlockNumber()
 	getRpcUrl() string
+	getBlockNumber() uint64
 	isAlive() bool
 	getLatancy() int64
 }
@@ -144,6 +145,10 @@ func (u *HttpUpstream) isAlive() bool {
 	return u.latency != math.MaxInt64
 }
 
+func (u *HttpUpstream) getBlockNumber() uint64 {
+	return uint64(u.blockNumber)
+}
+
 func (u *HttpUpstream) getLatancy() int64 {
 	return u.latency
 }
@@ -195,6 +200,10 @@ func (u *WsUpstream) updateBlockNumber() {
 	blockNumber, _ := strconv.ParseInt(res.Result, 0, 64)
 	u.blockNumber = int(blockNumber)
 	u.latency = latency
+}
+
+func (u *WsUpstream) getBlockNumber() uint64 {
+	return uint64(u.blockNumber)
 }
 
 func (u *WsUpstream) isAlive() bool {
