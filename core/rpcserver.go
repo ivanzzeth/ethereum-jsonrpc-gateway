@@ -220,15 +220,16 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		Time(proxyRequest.data.Method, float64(costInMs))
 
+		trimedResp := btsResp
+		if len(trimedResp) > 200 {
+			trimedResp = trimedResp[:200]
+		}
 		if err == nil {
 			// cache result
 			jsonRpcResp := &JsonRpcResponse{}
 			err = json.Unmarshal(btsResp, jsonRpcResp)
 			if err == nil {
-				trimedResp := btsResp
-				if len(trimedResp) > 200 {
-					trimedResp = trimedResp[:200]
-				}
+
 				if proxyRequest.isArchiveDataRequest && jsonRpcResp.Result != nil {
 					logrus.Infof("Req for chain %d from %s %s(%v) 200 and cache it: %v", chainId, req.RemoteAddr,
 						proxyRequest.data.Method, string(proxyRequest.reqBytes), string(trimedResp))
@@ -237,8 +238,8 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 
 			if !proxyRequest.isArchiveDataRequest {
-				logrus.Infof("Req for chain %d from %s %s(%v) 200", chainId, req.RemoteAddr, proxyRequest.data.Method,
-					string(proxyRequest.reqBytes))
+				logrus.Infof("Req for chain %d from %s %s(%v) 200: %v", chainId, req.RemoteAddr, proxyRequest.data.Method,
+					string(proxyRequest.reqBytes), string(trimedResp))
 			}
 		}
 	}()

@@ -25,6 +25,9 @@ func getHealthInfo() HealthInfo {
 
 		for chainId, cfg := range currentRunningConfig.Configs {
 			nodesInfo := []NodeInfo{}
+			cfg.updateLocker.RLock()
+			defer cfg.updateLocker.RUnlock()
+
 			for _, up := range cfg.Upstreams {
 				url := up.getRpcUrl()
 				if len(url) > 30 {

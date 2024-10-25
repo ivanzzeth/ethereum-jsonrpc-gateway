@@ -73,9 +73,14 @@ type RunningChainConfig struct {
 	MethodLimitationEnabled bool
 	allowedMethods          map[string]bool
 	allowedCallContracts    map[string]bool
+
+	updateLocker sync.RWMutex
 }
 
 func (c *RunningChainConfig) healthCheck() {
+	c.updateLocker.Lock()
+	defer c.updateLocker.Unlock()
+
 	var wg sync.WaitGroup
 	for _, up := range c.Upstreams {
 		wg.Add(1)
@@ -112,6 +117,9 @@ func NewRunningConfig(ctx context.Context, cfg *Config) (*RunningConfig, error) 
 
 	for chainId, chainCfg := range *cfg {
 		rcfg.Configs[chainId] = &RunningChainConfig{}
+
+		rcfg.Configs[chainId].updateLocker.Lock()
+		defer rcfg.Configs[chainId].updateLocker.Unlock()
 
 		for _, url := range chainCfg.Upstreams {
 

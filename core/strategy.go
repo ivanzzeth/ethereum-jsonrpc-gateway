@@ -30,6 +30,9 @@ func newNaiveProxy() *NaiveProxy {
 }
 
 func (p *NaiveProxy) handle(req *Request) ([]byte, error) {
+	currentRunningConfig.Configs[req.chainId].updateLocker.RLock()
+	defer currentRunningConfig.Configs[req.chainId].updateLocker.RUnlock()
+
 	upstream := currentRunningConfig.Configs[req.chainId].Upstreams[0]
 	bts, err := upstream.handle(req)
 
@@ -56,6 +59,9 @@ func (p *RaceProxy) handle(req *Request) ([]byte, error) {
 	successfulResponse := make(chan []byte, len(currentRunningConfig.Configs[req.chainId].Upstreams))
 	failedResponse := make(chan []byte, len(currentRunningConfig.Configs[req.chainId].Upstreams))
 	errorResponseUpstreams := make(chan Upstream, len(currentRunningConfig.Configs[req.chainId].Upstreams))
+
+	currentRunningConfig.Configs[req.chainId].updateLocker.RLock()
+	defer currentRunningConfig.Configs[req.chainId].updateLocker.RUnlock()
 
 	for _, upstream := range currentRunningConfig.Configs[req.chainId].Upstreams {
 		go func(upstream Upstream) {
@@ -155,6 +161,9 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 
 	cfg := currentRunningConfig.Configs[req.chainId]
 
+	currentRunningConfig.Configs[req.chainId].updateLocker.RLock()
+	defer currentRunningConfig.Configs[req.chainId].updateLocker.RUnlock()
+
 	for i := 0; i < len(cfg.Upstreams); i++ {
 		index := status.currentUpstreamIndex.Load().(int)
 
@@ -188,6 +197,10 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 					continue
 				}
 				if resp.Err.Code != 0 {
+					retry()
+					continue
+				}
+				if resp.ID != req.data.ID {
 					retry()
 					continue
 				}
@@ -270,6 +283,10 @@ func (p *LoadBalanceFallbackProxy) handle(req *Request) ([]byte, error) {
 					continue
 				}
 				if resp.Err.Code != 0 {
+					switchFunc()
+					continue
+				}
+				if resp.ID != req.data.ID {
 					switchFunc()
 					continue
 				}
