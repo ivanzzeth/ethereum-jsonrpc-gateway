@@ -1,6 +1,6 @@
 # ethereum-jsonrpc-gateway
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/HydroProtocol/ethereum-jsonrpc-gateway)](https://goreportcard.com/report/github.com/HydroProtocol/ethereum-jsonrpc-gateway)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ivanzzeth/ethereum-jsonrpc-gateway)](https://goreportcard.com/report/github.com/ivanzzeth/ethereum-jsonrpc-gateway)
 [![CircleCI](https://circleci.com/gh/HydroProtocol/ethereum-jsonrpc-gateway.svg?style=svg)](https://circleci.com/gh/HydroProtocol/ethereum-jsonrpc-gateway)
 [![Docker Cloud Automated build](https://img.shields.io/docker/cloud/automated/hydroprotocolio/ethereum-jsonrpc-gateway.svg)](https://hub.docker.com/r/hydroprotocolio/ethereum-jsonrpc-gateway)
 [![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/hydroprotocolio/ethereum-jsonrpc-gateway.svg)](https://hub.docker.com/r/hydroscanio/ethereum-jsonrpc-gateway)

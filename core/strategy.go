@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/HydroProtocol/ethereum-jsonrpc-gateway/utils"
+	"github.com/ivanzzeth/ethereum-jsonrpc-gateway/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -167,14 +167,14 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 			retry := func() {
 				nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(cfg.Upstreams))))
 				status.currentUpstreamIndex.Store(nextUpstreamIndex)
-				status.upsteamStatus.Store(i, false)
+				// status.upsteamStatus.Store(i, false)
 
 				logrus.Infof("upstream %d return err, switch to %d", index, nextUpstreamIndex)
 
-				go func(i int) {
-					<-time.After(5 * time.Second)
-					status.upsteamStatus.Store(i, true)
-				}(index)
+				// go func(i int) {
+				// 	<-time.After(5 * time.Second)
+				// 	status.upsteamStatus.Store(i, true)
+				// }(index)
 			}
 			if err != nil {
 				retry()
@@ -183,7 +183,7 @@ func (p *FallbackProxy) handle(req *Request) ([]byte, error) {
 				resp := &JsonRpcResponse{}
 				err = json.Unmarshal(bts, resp)
 				if err != nil {
-					logrus.Errorf("JsonRpcResponse unmarsharling failed: %v", err)
+					logrus.Errorf("JsonRpcResponse unmarsharling failed: %v, resp: %v", err, string(bts))
 					retry()
 					continue
 				}
@@ -254,7 +254,7 @@ func (p *LoadBalanceFallbackProxy) handle(req *Request) ([]byte, error) {
 			switchFunc := func() {
 				nextUpstreamIndex := int(math.Mod(float64(index+1), float64(len(cfg.Upstreams))))
 				status.currentUpstreamIndex.Store(nextUpstreamIndex)
-				logrus.Infof("upstream %d load balancing, then switch to %d", index, nextUpstreamIndex)
+				logrus.Debugf("upstream %d load balancing, then switch to %d", index, nextUpstreamIndex)
 			}
 
 			switchFunc()

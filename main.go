@@ -1,6 +1,6 @@
 package main
 
-import "github.com/HydroProtocol/ethereum-jsonrpc-gateway/cmd"
+import "github.com/ivanzzeth/ethereum-jsonrpc-gateway/cmd"
 
 func main() {
 	//os.Exit(cmd.Run())

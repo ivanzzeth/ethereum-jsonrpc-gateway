@@ -1,4 +1,4 @@
-module github.com/HydroProtocol/ethereum-jsonrpc-gateway
+module github.com/ivanzzeth/ethereum-jsonrpc-gateway
 
 go 1.13
 

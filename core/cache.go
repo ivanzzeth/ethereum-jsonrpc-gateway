@@ -28,3 +28,8 @@ func initCache(size int) *lru.TwoQueueCache {
 
 	return cache
 }
+
+type ReqCacheKey struct {
+	ChainId uint64 `json:"chainId"`
+	RequestData
+}

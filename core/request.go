@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HydroProtocol/ethereum-jsonrpc-gateway/utils"
+	"github.com/ivanzzeth/ethereum-jsonrpc-gateway/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -34,20 +34,17 @@ func (r *Request) isOldTrieRequest(currentBlockNumber int) (res bool) {
 		r.isArchiveDataRequest = res
 	}()
 
-	if currentBlockNumber == 0 {
-		return
-	}
-
-	if len(r.data.Params) == 0 {
-		return
-	}
-
 	method := r.data.Method
 	var reqBlockNumber interface{}
 
+	if method == "eth_blockNumber" {
+		res = false
+		return
+	}
+
 	if method == "eth_subscribe" || method == "eth_unsubscribe" || method == "trace_block" ||
 		method == "trace_call" || method == "trace_callMany" || method == "trace_filter" ||
-		method == "trace_transaction" {
+		method == "trace_transaction" || method == "eth_chainId" {
 		res = true
 		return
 	}

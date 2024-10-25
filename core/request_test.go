@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HydroProtocol/ethereum-jsonrpc-gateway/utils"
+	"github.com/ivanzzeth/ethereum-jsonrpc-gateway/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -34,8 +34,8 @@ func TestIsOldTrieRequest(t *testing.T) {
 		reqBytes: reqBodyBytes1,
 	}
 
-	assert.Equal(t, false, req1.isOldTrieRequest(0))
-	assert.Equal(t, false, req1.isOldTrieRequest(1))
+	assert.Equal(t, true, req1.isOldTrieRequest(0))
+	assert.Equal(t, true, req1.isOldTrieRequest(1))
 
 	reqBodyBytes2 := []byte(fmt.Sprintf(`{"params": [], "method": "eth_call", "id": %d, "jsonrpc": "2.0"}`, time.Now().Unix()))
 
@@ -74,6 +74,19 @@ func TestIsOldTrieRequest(t *testing.T) {
 	}
 
 	assert.Equal(t, true, req4.isOldTrieRequest(10000))
+
+	reqBodyBytes5 := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id": %d,"method":"eth_chainId"}`, time.Now().Unix()))
+
+	var data5 RequestData
+	_ = json.Unmarshal(reqBodyBytes5, &data5)
+
+	req5 := &Request{
+		logger:   logger,
+		data:     &data5,
+		reqBytes: reqBodyBytes5,
+	}
+
+	assert.Equal(t, true, req5.isOldTrieRequest(10000))
 }
 
 func TestNewRequest(t *testing.T) {

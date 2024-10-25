@@ -94,7 +94,7 @@ func newUpstream(ctx context.Context, chainId uint64, urlString string, oldTrieU
 }
 
 func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
-	logrus.Infof("%v handled by %v", request.data.Method, u.url)
+	logrus.Debugf("%v handled by %v", request.data.Method, u.url)
 
 	ul := u.url
 
@@ -158,7 +158,7 @@ func (u *HttpUpstream) getRpcUrl() string {
 }
 
 func (u *WsUpstream) handle(request *Request) ([]byte, error) {
-	logrus.Infof("%v handled by %v", request.data.Method, u.url)
+	logrus.Debugf("%v handled by %v", request.data.Method, u.url)
 
 	proxyRequest := &wsProxyRequest{
 		request,
