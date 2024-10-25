@@ -7,7 +7,7 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 )
 
-const CacheSize = 20000
+const CacheSize = 2000
 
 var cache *lru.TwoQueueCache
 var cacheOnce sync.Once

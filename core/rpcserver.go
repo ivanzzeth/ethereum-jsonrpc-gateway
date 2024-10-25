@@ -209,6 +209,7 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	Count("miss_cache")
+	Count("miss_cache_" + proxyRequest.data.Method)
 
 	var btsResp []byte
 
@@ -224,9 +225,13 @@ func (h *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			jsonRpcResp := &JsonRpcResponse{}
 			err = json.Unmarshal(btsResp, jsonRpcResp)
 			if err == nil {
+				trimedResp := btsResp
+				if len(trimedResp) > 200 {
+					trimedResp = trimedResp[:200]
+				}
 				if proxyRequest.isArchiveDataRequest && jsonRpcResp.Result != nil {
 					logrus.Infof("Req for chain %d from %s %s(%v) 200 and cache it: %v", chainId, req.RemoteAddr,
-						proxyRequest.data.Method, string(proxyRequest.reqBytes), string(btsResp))
+						proxyRequest.data.Method, string(proxyRequest.reqBytes), string(trimedResp))
 					getCache().Add(string(reqKey), btsResp)
 				}
 			}
