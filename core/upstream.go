@@ -119,6 +119,19 @@ func (u *HttpUpstream) handle(request *Request) ([]byte, error) {
 		return nil, err
 	}
 
+	resp := &JsonRpcResponse{}
+	err = json.Unmarshal(bts, resp)
+	if err != nil {
+		logrus.Warnf("failed to unmarshal json rpc resp: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal json rpc resp: %v", err)
+	}
+	if resp.ID != request.data.ID {
+		logrus.Warnf("not match request's ID, reqId=%v, respId=%v", request.data.ID, resp.ID)
+		return nil, fmt.Errorf("not match request's ID, reqId=%v, respId=%v", request.data.ID, resp.ID)
+	}
+
+	// logrus.Infof("req: %+v, resp: %+v", *request.data, *resp)
+
 	return bts, nil
 }
 
@@ -177,6 +190,16 @@ func (u *WsUpstream) handle(request *Request) ([]byte, error) {
 
 	select {
 	case res := <-proxyRequest.resBytes:
+		resp := &JsonRpcResponse{}
+		err := json.Unmarshal(res, resp)
+		if err != nil {
+			logrus.Warnf("failed to unmarshal json rpc resp: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal json rpc resp: %v", err)
+		}
+		if resp.ID != request.data.ID {
+			logrus.Warnf("not match request's ID, reqId=%v, respId=%v", request.data.ID, resp.ID)
+			return nil, fmt.Errorf("not match request's ID, reqId=%v, respId=%v", request.data.ID, resp.ID)
+		}
 		return res, nil
 	case <-time.After(5 * time.Second): // TODO use a configurable timeout
 		return nil, TimeoutError
