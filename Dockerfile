@@ -23,5 +23,6 @@ WORKDIR /usr/src/app
 
 RUN addgroup -S appuser && adduser -S -G appuser appuser
 USER appuser
+EXPOSE 3005 9090
 ENTRYPOINT [ "app" ]
 CMD [ "start" ]
